@@ -1,0 +1,3 @@
+python main.py --dataset Cora --lp_model metamodel --exp_type clean --device cuda:0 --seed 1
+python main.py --dataset CiteSeer --lp_model metamodel --exp_type clean --device cuda:0 --seed 1
+python main.py --dataset PubMed --lp_model metamodel --exp_type clean --device cuda:0 --seed 1

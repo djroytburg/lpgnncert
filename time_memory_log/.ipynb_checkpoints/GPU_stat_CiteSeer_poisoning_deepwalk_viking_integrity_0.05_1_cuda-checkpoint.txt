@@ -1,0 +1,4 @@
+Timestamp	GPU_Usage_Percentage	GPU_Total_Mem_Usage	GPU_Total_Mem_Usage_Percentage
+1684477681.5643554	0	3	0.0
+1684477682.2201483	0	3	0.0
+1684477682.881614	0	3	0.0
