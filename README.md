@@ -1,8 +1,8 @@
-# Contrastive Loss Gradient Attack (CLGA)
- Official implementation of [Unsupervised Graph Poisoning Attack via Contrastive Loss Back-propagation](https://arxiv.org/abs/2201.07986), WWW22
+# Simplifying  Transferable   Adversarial Attacks on  Graph Representation Learning (STAA)
+ Official implementation of [ Simplifying  Transferable   Adversarial Attacks on  Graph Representation Learning]
 
 
-Built based on [GCA](https://github.com/CRIPAC-DIG/GCA) and [DeepRobust](https://deeprobust.readthedocs.io/en/latest/#).
+Built based on [GCA](https://github.com/CRIPAC-DIG/GCA), [DeepRobust](https://deeprobust.readthedocs.io/en/latest/#), [Viking](https://github.com/virresh/viking), [CLGA](https://github.com/RinneSz/CLGA)
 
 ## Requirements
 Tested on pytorch 1.7.1 and torch_geometric 1.6.3.
