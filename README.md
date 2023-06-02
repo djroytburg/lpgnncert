@@ -17,14 +17,13 @@ python main.py --dataset Cora --attack_method aalp --exp_type poisoning --device
 ```
 python main.py --dataset CiteSeer --attack_method aalp --exp_type poisoning --device cuda:0 --attack_rate 0.1 --seed 2 --lp_model deepwalk  --attack_goal='integrity'
 ```
-It will save one poisoned adjacency matrix in ./poisoned_adj.
 
-3. To run clean experiments
+3.To run clean experiments
 ```
 python main.py --dataset Cora --lp_model metamodel --exp_type clean --device cuda:0 --seed 1
 ```
 
-4. To produce all experiments, pealse config scripts in ./run/ 
+4.To produce all experiments, pealse config scripts in ./run/ 
 ```
 bash ./run/run_poisoning.sh 
 ```
