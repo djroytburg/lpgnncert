@@ -1,4 +1,4 @@
-# Simplifying  Transferable   Adversarial Attacks on  Graph Representation Learning (STAA)
+#  Simplifying Surrogate Models for Transferable Graph Poisoning Attacks on Link Prediction
  Official implementation of [ Simplifying  Transferable   Adversarial Attacks on  Graph Representation Learning]
 
 
