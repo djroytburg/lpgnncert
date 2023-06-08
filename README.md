@@ -1,5 +1,5 @@
 #  Simplifying Surrogate Models for Transferable Graph Poisoning Attacks on Link Prediction
- Official implementation of [ Simplifying  Transferable   Adversarial Attacks on  Graph Representation Learning]
+ Official implementation of  Simplifying Surrogate Models for Transferable Graph Poisoning Attacks on Link Prediction
 
 
 Built based on [GCA](https://github.com/CRIPAC-DIG/GCA), [DeepRobust](https://deeprobust.readthedocs.io/en/latest/#), [Viking](https://github.com/virresh/viking), [CLGA](https://github.com/RinneSz/CLGA)
