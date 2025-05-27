@@ -19,6 +19,7 @@ from attack_models.integrity import AALP_Integrity
 from attack_models.availability import AALP_Availability
 from attack_models.CLGA import Metacl as CLGA
 from attack_models.viking import get_attacked_graph_viking as viking
+from gnncert.hash_agent import HashAgent, enlarge_single_graph
 from lp_models.DeepWalk import DeepWalk_LP
 from lp_models.GAT import GAT_LP
 from lp_models.GCA import GCA_LP
@@ -317,7 +318,7 @@ if __name__ == '__main__':
     parser.add_argument('--outputs', type=str, default='outputs')
     parser.add_argument('--seed', type=int, default='32')
     parser.add_argument('--datasetsDir', type=str, default='datasets')
-
+    parser.add_argument('--gnncert', default=False, action='store_true', help='Whether to use the GNNCert')
     args = parser.parse_args()
     filename = osp.join(args.outputs, '_'.join([args.dataset, args.exp_type, args.lp_model, args.attack_method,args.attack_goal, str(args.attack_rate), str(args.seed), 'best_val_result']))
     if os.path.exists(filename):
@@ -331,6 +332,13 @@ if __name__ == '__main__':
     data=load_dataset(args.dataset)
     print(args)
     print(data)
+    hash_agent = None
+    if args.gnncert:
+        print("Using GNNCert\n\n")
+        hash_agent = HashAgent(p=0.1)
+        data = enlarge_single_graph(data,hash_agent)
+        for graph in data.graphs:
+            print(graph)
     best_val_result,best_test_result,best_scores=None,None,None
     if args.exp_type=='clean':
         if args.dataset=='zhihu' or args.dataset=='quora':
@@ -351,7 +359,10 @@ if __name__ == '__main__':
         else:
             modifiedAdj=load_modifiedAdj(args)
             if args.attack_goal=='integrity':
+                print(data)
                 data=modifiedAdj2data_small(modifiedAdj,data)
+                if args.gnncert:
+                    data=enlarge_single_graph(data, hash_agent)
             elif args.attack_goal=='availability':
                 data.edge_index= modifiedAdj.nonzero().T
                 data.cpu()

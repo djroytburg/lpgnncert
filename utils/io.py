@@ -13,7 +13,7 @@ def load_dataset(dataset):
     #判断是否向存在
     if not osp.exists(osp.join(path, 'data.pt')):
         generate_dataset(dataset)
-    data = torch.load(osp.join(path, 'data.pt'))
+    data = torch.load(osp.join(path, 'data.pt'), weights_only=False)
     return data
 
 #使用pickle将模型保存到args.outputs文件夹下,文件名由args里面的dataset、exp_type、lp_model、attack_method、attack_rate、seed组成

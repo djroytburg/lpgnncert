@@ -185,6 +185,10 @@ def modifiedAdj2data(modifiedAdj,data):
     new_data.train_pos_edge_index=torch.tensor(edges).T
     return new_data
 def modifiedAdj2data_small(modifiedAdj,data):
+    try:
+        data = data.graphs[0]
+    except AttributeError:
+        data = data
     new_data=copy.deepcopy(data)
     new_data.edge_index= modifiedAdj.nonzero().T
     print('modifiedAdj2data_small')

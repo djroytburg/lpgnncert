@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import tqdm
 from torch import nn
 from torch_geometric.nn import APPNP, GAE
+from torch_geometric.data import Data
 
 from lp_models.BaseLP import BaseLp
 
@@ -74,8 +75,13 @@ class VGNAE_LP(BaseLp):
     #初始化
     def __init__(self, data, embedding_dim, device):
         super().__init__()
-        self.model = VGNAE(Encoder(data.x.size()[1], embedding_dim, data.train_pos_edge_index)).to(device)
-        self.data = data
+        try:
+            self.model = VGNAE(Encoder(data.x.size()[1], embedding_dim, data.train_pos_edge_index)).to(device)
+        except AttributeError:
+            import pickle
+            pickle.dump(data, open('hybridized_data.pkl','wb'))
+            size = data.graphs[0].x.size()[1]
+            self.model = VGNAE(Encoder(size, embedding_dim, data.graphs[0].train_pos_edge_index)).to(device)
         self.device = device
     def train(self,data,optimizer,epochs):
         best_val_result = 0
@@ -83,19 +89,26 @@ class VGNAE_LP(BaseLp):
         best_test_result = 0
         best_model = copy.deepcopy(self.model)
         best_scores = None
+        try:
+            graphs = data
+            test_graph = graphs.graphs[0]
+        except AttributeError:
+            graphs = Data(graphs=[data])
+            test_graph = data
         for epoch in tqdm.tqdm(range(epochs)):
-            self.model.train()
-            optimizer.zero_grad()
-            z = self.model.encode(self.data.x.to(self.device), self.data.train_pos_edge_index.to(self.device))
-            loss = self.model.recon_loss(z, self.data.train_pos_edge_index.to(self.device))
-            loss.backward()
-            optimizer.step()
+            for i, data in enumerate(graphs.graphs):
+                self.model.train()
+                optimizer.zero_grad()
+                z = self.model.encode(data.x.to(self.device), data.train_pos_edge_index.to(self.device))
+                loss = self.model.recon_loss(z, data.train_pos_edge_index.to(self.device))
+                loss.backward()
+                optimizer.step()
             if (epoch + 1) % 10 == 0:
                 self.model.eval()
                 with torch.no_grad():
-                    z = self.model.encode(self.data.x.to(self.device), self.data.train_pos_edge_index.to(self.device))
-                    val_result,val_score= self.model.test(z, self.data.val_pos_edge_index.to(self.device), self.data.val_neg_edge_index.to(self.device))
-                    test_result,test_score = self.model.test(z, self.data.test_pos_edge_index.to(self.device), self.data.test_neg_edge_index.to(self.device))
+                    z = self.model.encode(test_graph.x.to(self.device), test_graph.train_pos_edge_index.to(self.device))
+                    val_result,val_score= self.model.test(z, test_graph.val_pos_edge_index.to(self.device), test_graph.val_neg_edge_index.to(self.device))
+                    test_result,test_score = self.model.test(z, test_graph.test_pos_edge_index.to(self.device), test_graph.test_neg_edge_index.to(self.device))
                     scores=[val_score,test_score]
                     if val_result['auc'] > best_val_result_auc:
                         best_val_result = val_result
