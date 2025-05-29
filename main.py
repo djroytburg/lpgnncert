@@ -192,7 +192,7 @@ def run_poisoning_exp_integrity(args,data_o):
     adj_matrix = nx.adjacency_matrix(G).todense()
     adj_matrix=torch.tensor(adj_matrix)
     #使用pickle将modified_adj保存到args.outputs文件夹下,文件名由args里面的dataset、attack_method、attack_rate、modifiedAdj组成
-    with open(os.path.join(args.outputs,'adj/{}_{}_{}_{}_modifiedAdj.pkl'.format(args.dataset,args.attack_method,args.attack_goal,args.attack_rate)),'wb') as f:
+    with open(os.path.join(args.outputs,'adj/{}_{}_{}_{}_{}modifiedAdj.pkl'.format(args.dataset,args.attack_method,args.attack_goal,args.attack_rate, 'gnncert_' if args.gnncert else '')),'wb') as f:
         pickle.dump(adj_matrix,f)
 def run_poisoning_exp_integrity_nodeattack(args,data):
     device=args.device
@@ -335,10 +335,7 @@ if __name__ == '__main__':
     hash_agent = None
     if args.gnncert:
         print("Using GNNCert\n\n")
-        hash_agent = HashAgent(p=0.1)
-        data = enlarge_single_graph(data,hash_agent)
-        for graph in data.graphs:
-            print(graph)
+        hash_agent = HashAgent(T=10,p=0.4)
     best_val_result,best_test_result,best_scores=None,None,None
     if args.exp_type=='clean':
         if args.dataset=='zhihu' or args.dataset=='quora':
@@ -347,7 +344,7 @@ if __name__ == '__main__':
             best_val_result,best_test_result,best_score=run_clean_exp(args,data)
     elif args.exp_type=='poisoning':
         #查看是否存在已经保存的modified_adj
-        filename=f'{args.outputs}/adj/{args.dataset}_{args.attack_method}_{args.attack_goal}_{args.attack_rate}_modifiedAdj.pkl'
+        filename=f'{args.outputs}/adj/{args.dataset}_{args.attack_method}_{args.attack_goal}_{args.attack_rate}_{"gnncert_" if args.gnncert else ""}modifiedAdj.pkl'
         if not os.path.exists(filename):
             if args.attack_goal=='integrity':
                 run_poisoning_exp_integrity(args,data)
@@ -363,6 +360,8 @@ if __name__ == '__main__':
                 data=modifiedAdj2data_small(modifiedAdj,data)
                 if args.gnncert:
                     data=enlarge_single_graph(data, hash_agent)
+                    for graph in data.graphs:
+                        print(graph)
             elif args.attack_goal=='availability':
                 data.edge_index= modifiedAdj.nonzero().T
                 data.cpu()
@@ -375,7 +374,10 @@ if __name__ == '__main__':
             filename=f'{args.outputs}/adj/{args.dataset}_{args.attack_method}_{args.attack_goal}_{args.attack_rate}_modifiedAdj.pkl'
             if not os.path.exists(filename) or  args.attack_method=='aalp':
                 if args.attack_goal=='integrity':
-                    run_poisoning_exp_integrity(args,data)
+                    if args.gnncert:
+                        run_poisoning_exp_integrity(args,data.graphs[0])
+                    else:
+                        run_poisoning_exp_integrity(args,data)
                 elif args.attack_goal=='availability':
                     run_poisoning_exp_availability(args,data)
             if args.dataset=='zhihu' or args.dataset=='quora':
@@ -401,7 +403,7 @@ if __name__ == '__main__':
     print('args:',args)
     print('best_val_result:',best_val_result)
     print('best_test_result:',best_test_result)
-    
+    print('difference: ', {k:(v - best_test_result[k]) for (k, v) in best_val_result.items()})
     logging.critical(f'time:{datetime.datetime.now()}')
     logging.critical('args:{}'.format(args))
     logging.critical('best_val_result:{}'.format(best_val_result))

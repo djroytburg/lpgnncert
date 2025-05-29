@@ -41,6 +41,23 @@ def train_test_split_edges_clga(data,val_ratio: float = 0.1,
     data.test_neg_edge_index=negative_edge_index[:,:data.test_pos_edge_index.shape[1]]
     return data
 
+def train_split_edges_clga(data,seed=42):
+    set_random_seed(seed)
+    bidirected_edge_index = data.edge_index.cpu().numpy()
+    index = np.where(bidirected_edge_index[0]<bidirected_edge_index[1])[0]
+    undirected_edge_index = torch.Tensor(bidirected_edge_index[:, index]).long()
+
+    train_edge_index = to_undirected(undirected_edge_index)
+    data.train_pos_edge_index=train_edge_index
+    observed_edge_sp_adj = torch.sparse.FloatTensor(data.edge_index,
+                                                    torch.ones(data.edge_index.shape[1]),
+                                                    [data.num_nodes, data.num_nodes])
+    observed_edge_adj = observed_edge_sp_adj.to_dense()
+    negative_edges = 1 - observed_edge_adj - torch.eye(data.num_nodes)
+    negative_edge_index = torch.nonzero(negative_edges)
+    negative_edge_index=negative_edge_index[torch.randperm(negative_edge_index.shape[0])].t()
+    data.train_neg_edge_index=negative_edge_index[:,-data.train_pos_edge_index.shape[1]:]
+    return data
 
 def train_test_split_edges(
     data: 'torch_geometric.data.Data',
@@ -193,6 +210,7 @@ def modifiedAdj2data_small(modifiedAdj,data):
     new_data.edge_index= modifiedAdj.nonzero().T
     print('modifiedAdj2data_small')
     new_edge_index=set([(a,b) for a,b in zip(new_data.edge_index[0].tolist(),new_data.edge_index[1].tolist())])
+    print(len(new_edge_index))
     old_edge_index=set([(a,b) for a,b in zip(data.edge_index[0].tolist(),data.edge_index[1].tolist())])
     old_train_pos_edge_index=set([(a,b) for a,b in zip(data.train_pos_edge_index[0].tolist(),data.train_pos_edge_index[1].tolist())])
     old_val_pos_edge_index=set([(a,b) for a,b in zip(data.val_pos_edge_index[0].tolist(),data.val_pos_edge_index[1].tolist())])

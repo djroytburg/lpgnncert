@@ -10,7 +10,7 @@ from torch_geometric.loader import DataLoader
 
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from utils.utils import train_test_split_edges_clga
+from utils.utils import train_split_edges_clga, train_test_split_edges_clga
 import statistics
 device = "cuda" if torch.cuda.is_available() else "cpu"
 class HashAgent():
@@ -47,56 +47,74 @@ class HashAgent():
         return I
     
     def generate_mixed_subgraphs(self, graph):
-        
         mixed_subgraphs = []
+        V = graph.x.shape[0]
         
-        original = graph.edge_index
-        nodes = range(graph.x.shape[0])
-
-        V= graph.x.shape[0]
-        
-        
-                    
+        # Create T empty subgraphs
         for i in range(self.T):
             mixed_subgraphs.append(Data(
-                        x = graph.x,
-                        y = graph.y,
-                        edge_attr = graph.edge_attr,
-                        edge_index = []
-                    ))
-            
-        for i in tqdm(range(len(original[0])), desc="[generate_mixed_subgraphs] Original Edges"):
-            
-            u=original[0,i]
-            v=original[1,i]
-            if u>v:
+                x = graph.x,
+                y = graph.y,
+                edge_attr = graph.edge_attr,
+                edge_index = []
+            ))
+        
+        # Only use training edges for subgraph creation
+        train_edges = graph.train_pos_edge_index
+        
+        # First, distribute training edges to subgraphs
+        for i in range(len(train_edges[0])):
+            u = train_edges[0,i]
+            v = train_edges[1,i]
+            if u > v:
                 I = self.hash_edge(V,v,u)
             else:
                 I = self.hash_edge(V,u,v)
             mixed_subgraphs[I].edge_index.append([u,v])
-            
-        for i in tqdm(range(V-1), desc="[generate_mixed_subgraphs] Hybrid Edges"):
-            for j in range(i+1,V):
-                u=nodes[i]
-                v=nodes[j]
-                I = self.hash_edge(V,u,v)
-                for k in range(len(self.add_I[I])):
-                    if self.add_I[I][k]==I:
-                        continue
+            mixed_subgraphs[I].edge_index.append([v,u])
+        
+        # Then, generate hybrid edges only from training edges
+        for i in tqdm(range(len(train_edges[0])), desc="[generate_mixed_subgraphs] Hybrid Edges"):
+            u = train_edges[0,i]
+            v = train_edges[1,i]
+            I = self.hash_edge(V,u,v)
+            for k in range(len(self.add_I[I])):
+                if self.add_I[I][k]==I:
+                    continue
+                # Only add hybrid edge if it's not a val/test edge
+                if not self.is_val_test_edge(u, v, graph):
                     mixed_subgraphs[self.add_I[I][k]].edge_index.append([u,v])
                     mixed_subgraphs[self.add_I[I][k]].edge_index.append([v,u])
-                    
-        deletes = []
+        
+        # Process subgraphs and split into train/val/test
         new_mixed_subgraphs = []
         for i in range(self.T):
             if len(mixed_subgraphs[i].edge_index)==0:
                 continue
             mixed_subgraphs[i].edge_index = torch.tensor(mixed_subgraphs[i].edge_index,dtype=torch.int64).transpose(1,0)
-            new_mixed_subgraph = train_test_split_edges_clga(mixed_subgraphs[i])
+            mixed_subgraphs[i].train_pos_edge_index =  mixed_subgraphs[i].edge_index
+            new_mixed_subgraph = train_split_edges_clga(mixed_subgraphs[i])
+            new_mixed_subgraph.num_nodes = graph.num_nodes
             new_mixed_subgraphs.append(new_mixed_subgraph)
             
-        return new_mixed_subgraphs#mixed_subgraphs
+        return new_mixed_subgraphs
 
+    def is_val_test_edge(self, u, v, graph):
+        # Check if edge (u,v) exists in validation or test sets
+        val_edges = graph.val_pos_edge_index
+        test_edges = graph.test_pos_edge_index
+        
+        # Check in validation edges
+        val_mask = ((val_edges[0] == u) & (val_edges[1] == v)) | ((val_edges[0] == v) & (val_edges[1] == u))
+        if val_mask.any():
+            return True
+        
+        # Check in test edges
+        test_mask = ((test_edges[0] == u) & (test_edges[1] == v)) | ((test_edges[0] == v) & (test_edges[1] == u))
+        if test_mask.any():
+            return True
+        
+        return False
 
 def enlarge_graph(dataset,hasher):
     new_graphs = []
@@ -153,10 +171,6 @@ def enlarge_graph(dataset,hasher):
 def enlarge_single_graph(graph,hasher, filename=None):
     new_graphs = []
 
-    n = graph.x.shape[0]
-    ground = torch.zeros((n,n)).to(graph.x.device)
-    for j in range(graph.edge_index[0].shape[0]):
-        ground[graph.edge_index[0,j],graph.edge_index[1,j]]=1
     new_graphs.append(graph)
     mixed_graphs=hasher.generate_mixed_subgraphs(graph)
     
@@ -170,71 +184,70 @@ def enlarge_single_graph(graph,hasher, filename=None):
     return dataset
         
     
-class RobustClassifier(nn.Module):
-    def __init__(self,BaseClassifier,Hasher):
-        '''
-            num_layers: number of layers in the neural networks (INCLUDING the input layer)
-            num_mlp_layers: number of layers in mlps (EXCLUDING the input layer)
-            input_dim: dimensionality of input features
-            hidden_dim: dimensionality of hidden units at ALL layers
-            output_dim: number of classes for prediction
-            final_dropout: dropout ratio on the final linear layer
-            learn_eps: If True, learn epsilon to distinguish center nodes from neighboring nodes. If False, aggregate neighbors and center nodes altogether. 
-            neighbor_pooling_type: how to aggregate neighbors (mean, average, or max)
-            graph_pooling_type: how to aggregate entire nodes in a graph (mean, average)
-            device: which device to use
-        '''
-
-        super(RobustClassifier, self).__init__()
+class RobustEdgeClassifier(nn.Module):
+    def __init__(self, BaseClassifier, Hasher):
+        super(RobustEdgeClassifier, self).__init__()
         self.BaseClassifier = BaseClassifier
         self.Hasher = Hasher
-        self.device =  "cuda" if torch.cuda.is_available() else "cpu"
-    def forward(self, graph):
-        subgraphs = self.Hasher.generate_mixed_subgraphs(graph)
-        
-        for i in range(len(subgraphs)):
-            subgraphs[i].exp_key = [i]
-        loader = DataLoader(subgraphs, batch_size = len(subgraphs), shuffle = True)
-        
-        #x = torch.cat([subgraphs[i].x for i in range(len(subgraphs))]).to(self.device)
-        #edge_index = torch.cat([subgraphs[i].edge_index for i in range(len(subgraphs))]).to(self.device)
-        self.BaseClassifier.eval()
-        outputs = []
-        for i in range(len(subgraphs)):
-            data=subgraphs[i]
-            output = self.BaseClassifier(data.x,data.edge_index,batch =data.batch).cpu().detach()
-            outputs.append(output)
-        outputs = np.array(outputs)
-        Y_labels = np.argmax(outputs,axis=1)
-        vote_label = np.argmax(np.bincount(Y_labels))
-        return vote_label
-    def vote(self, graph):
-        subgraphs = self.Hasher.generate_mixed_subgraphs(graph)
-        
-        for i in range(len(subgraphs)):
-            subgraphs[i].exp_key = [i]
-        loader = DataLoader(subgraphs, batch_size = len(subgraphs), shuffle = True)
-        
-        self.BaseClassifier.eval()
-        outputs=[]
-        Y_labels= []
-        for i in range(len(subgraphs)):
-            data=subgraphs[i].to(device)
-            output = self.BaseClassifier(data.x,data.edge_index,batch =data.batch).cpu().detach()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            Y_labels.append(np.argmax(output,axis=1).item())
-            
-        count = np.bincount(Y_labels)
-        votes = count.copy()
-        vote_label = np.argmax(count)
-        Yc = count[vote_label]
-        count[vote_label]=-1
-        second_label = np.argmax(count)
-        Yb = count[second_label]
+    def forward(self, graph, edge_index, subgraphs=None):
+        # Generate subgraphs (only from training edges)
+        if not subgraphs:
+            subgraphs = self.Hasher.generate_mixed_subgraphs(graph)
         
-        if vote_label>second_label:
-            Mc = (Yc-Yb-1)//2
-        else:
-            Mc = (Yc-Yb)//2
-        return vote_label, Mc
+        # Get predictions for each edge from each subgraph
+        self.BaseClassifier.eval()
+        edge_predictions = []  # List to store predictions for each subgraph
+        
+        for i, subgraph in enumerate(subgraphs):
+            # Get predictions using the base classifier's forward method
+            pred = self.BaseClassifier(subgraph.to(self.device), edge_index.to(self.device))
+            edge_predictions.append(pred)
+        
+        # Stack predictions from all subgraphs
+        edge_predictions = torch.stack(edge_predictions)
+        # assert edge_predictions.shape[0] <= 2
+        # if edge_predictions.shape[0] == 2:
+        #     print(np.sum(edge_predictions[0].detach().cpu().numpy() != edge_predictions[1].detach().cpu().numpy()))
+        #     print(len(edge_predictions[0]))
+        # Aggregate predictions (mean across subgraphs)
+        final_predictions = torch.mean(edge_predictions, dim=0)
+                
+        return final_predictions
+
+    def vote(self, graph):
+        # Generate subgraphs (only from training edges)
+        subgraphs = self.Hasher.generate_mixed_subgraphs(graph)
+        
+        # Get predictions for each edge from each subgraph
+        self.BaseClassifier.eval()
+        edge_predictions = []  # List to store predictions for each subgraph
+        
+        for subgraph in subgraphs:
+            # Get predictions using the base classifier's forward method
+            pred = self.BaseClassifier(subgraph, graph.val_pos_edge_index)
+            edge_predictions.append(pred)
+        
+        # Stack predictions from all subgraphs
+        edge_predictions = torch.stack(edge_predictions)
+        
+        # For each edge, calculate margin between top predictions
+        margins = torch.zeros(edge_predictions.shape[1])
+        for i in range(edge_predictions.shape[1]):
+            # Get predictions for this edge across all subgraphs
+            edge_probs = edge_predictions[:, i]
+            
+            # Calculate margin (difference between mean and second most common prediction)
+            mean_prob = torch.mean(edge_probs)
+            # For binary case, second prediction is 1 - mean_prob
+            second_prob = 1 - mean_prob
+            margin = abs(mean_prob - second_prob)
+            margins[i] = margin
+        
+        # Get final predictions
+        final_predictions = torch.mean(edge_predictions, dim=0)
+        binary_predictions = (final_predictions > 0.5).float()
+        
+        return binary_predictions, margins
     
