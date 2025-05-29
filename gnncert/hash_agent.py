@@ -24,7 +24,7 @@ class HashAgent():
         self.T = T
         self.h= h 
         self.add_I = [ [] for _ in range(self.T)]
-        
+        self.p = p
         for i in range(self.T):
             for j in range(self.T):
                 if j==i:
@@ -191,7 +191,7 @@ class RobustEdgeClassifier(nn.Module):
         self.Hasher = Hasher
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    def forward(self, graph, edge_index, subgraphs=None):
+    def forward(self, graph, edge_index, subgraphs=None, split=None):
         # Generate subgraphs (only from training edges)
         if not subgraphs:
             subgraphs = self.Hasher.generate_mixed_subgraphs(graph)
@@ -213,7 +213,25 @@ class RobustEdgeClassifier(nn.Module):
         #     print(len(edge_predictions[0]))
         # Aggregate predictions (mean across subgraphs)
         final_predictions = torch.mean(edge_predictions, dim=0)
-                
+
+        # --- Your Debug/Capture Code ---
+        # You need a way to know if this run is for p=0 or p=1 (e.g., pass a flag, or check a global var if desperate)
+        # Let's assume you have a way to distinguish, e.g., an environment variable or a temporary file flag.
+
+        # For simplicity, let's say you save them to files.
+        # This should happen during a validation or test call, for a specific split.
+        # Example: only save during the 'val' split evaluation to avoid too many files.
+        if split == 'val': # You'd need to ensure 'graph' has this, or use a passed 'split' argument
+            if self.Hasher.p == 0.0: # A boolean you set based on how you launched the script
+                torch.save(final_predictions.detach().cpu(), 'final_preds_p0_val.pt')
+                # Also good to save the individual components for p=0
+                # edge_predictions_p0_val.pt will be a stack of 13 prediction tensors
+                torch.save(edge_predictions.detach().cpu(), 'edge_predictions_p0_val.pt') 
+            elif self.Hasher.p == 1.0:
+                torch.save(final_predictions.detach().cpu(), 'final_preds_p1_val.pt')
+                torch.save(edge_predictions.detach().cpu(), 'edge_predictions_p1_val.pt')
+        # --- End Debug/Capture Code ---
+
         return final_predictions
 
     def vote(self, graph):

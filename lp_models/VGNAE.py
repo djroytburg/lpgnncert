@@ -88,7 +88,7 @@ class VGNAE(GAE):
 
 class VGNAE_LP(BaseLp):
     #初始化
-    def __init__(self, data, embedding_dim, device):
+    def __init__(self, data, embedding_dim, device, p=0.4, T=12):
         super().__init__()
         self.robust = False
         try:
@@ -99,7 +99,8 @@ class VGNAE_LP(BaseLp):
             pickle.dump(data, open('hybridized_data.pkl','wb'))
             size = data.graphs[0].x.size()[1]
             self.model = VGNAE(Encoder(size, embedding_dim, data.graphs[0].train_pos_edge_index)).to(device)
-            self.hash_agent = HashAgent(p=0.1)
+            self.T = T; self.p = p
+            self.hash_agent = HashAgent(T=self.T,p=self.p)
         self.device = device
     
     def test(self, data, split='val', subgraphs=None):
@@ -120,9 +121,9 @@ class VGNAE_LP(BaseLp):
             try:
                 # print(split)
                 # print("pos")
-                pos_pred = self.classifier(data, pos_edge_index, subgraphs=subgraphs)
+                pos_pred = self.classifier(data, pos_edge_index, subgraphs=subgraphs, split=split)
                 # print("neg")
-                neg_pred = self.classifier(data, neg_edge_index, subgraphs=subgraphs)
+                neg_pred = self.classifier(data, neg_edge_index, subgraphs=subgraphs, split=split)
             except AttributeError:
                 print(type(pos_edge_index), type(neg_edge_index), type(subgraphs[0]))
                 print(pos_edge_index, neg_edge_index, subgraphs[0])
