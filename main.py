@@ -81,7 +81,7 @@ def run_clean_exp(args,data):
         save_results(model, best_val_result, best_test_result, best_scores, args, data)
         
     elif args.lp_model == 'vgnae':
-        model=VGNAE_LP(data,128,device=args.device)
+        model=VGNAE_LP(data,128,device=args.device, T=args.T, p=args.p)
         optimizer = optim.Adam(model.model.parameters(), lr=0.01)
         best_val_result,best_test_result,best_scores=model.get_result(data,optimizer,300)
         save_results(model, best_val_result, best_test_result, best_scores, args, data)
@@ -319,6 +319,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default='32')
     parser.add_argument('--datasetsDir', type=str, default='datasets')
     parser.add_argument('--gnncert', default=False, action='store_true', help='Whether to use the GNNCert')
+    parser.add_argument('-T', type=int, default=12)
+    parser.add_argument('-p', type=float, default=0.4)
     args = parser.parse_args()
     filename = osp.join(args.outputs, '_'.join([args.dataset, args.exp_type, args.lp_model, args.attack_method,args.attack_goal, str(args.attack_rate), str(args.seed), 'best_val_result']))
     if os.path.exists(filename):
@@ -335,7 +337,7 @@ if __name__ == '__main__':
     hash_agent = None
     if args.gnncert:
         print("Using GNNCert\n\n")
-        hash_agent = HashAgent(T=10,p=0.4)
+        hash_agent = HashAgent(T=args.T,p=args.p)
     best_val_result,best_test_result,best_scores=None,None,None
     if args.exp_type=='clean':
         if args.dataset=='zhihu' or args.dataset=='quora':
